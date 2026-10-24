@@ -29,6 +29,8 @@
         .delete-tile { position: absolute; top: 4px; right: 8px; background: none; border: none; color: #ef4444; font-weight: bold; font-size: 1.1rem; cursor: pointer; }
 
         .add-tile-box { background: #f9fafb; padding: 12px; border-radius: 10px; border: 1px dashed #cbd5e1; margin-bottom: 20px; }
+        .sync-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; background: #e2e8f0; padding: 8px 12px; border-radius: 8px; font-size: 0.9rem; }
+        .sync-btn { background: #2563eb; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; }
         #melding { text-align: center; font-weight: bold; margin-top: 10px; color: #16a34a; }
     </style>
 </head>
@@ -36,6 +38,12 @@
 
 <div class="container">
     <h1>💧 Drinken Tracker</h1>
+
+    <!-- Handmatige sync balk -->
+    <div class="sync-bar">
+        <span>🔄 Synchronisatie</span>
+        <button class="sync-btn" onclick="laadData()">Gegevens ophalen</button>
+    </div>
     
     <!-- LED Bar Dashboard Card -->
     <div class="card">
@@ -69,6 +77,19 @@
 <script>
     const NPOINT_URL = "https://api.npoint.io/179458eef924c0acf62d";
 
+    let standaardTegels = [
+        { name: "Kopje", ml: 150 },
+        { name: "Glas", ml: 250 },
+        { name: "Flesje", ml: 500 },
+        { name: "Mok", ml: 300 }
+    ];
+
+    let lokaleData = {
+        drinken: [],
+        tegels: standaardTegels,
+        limiet: 1000
+    };
+
     // Genereer 10 LED segmenten
     const ledBar = document.getElementById('led-bar');
     for(let i = 0; i < 10; i++) {
@@ -78,64 +99,45 @@
         ledBar.appendChild(seg);
     }
 
-    let standaardTegels = [
-        { name: "Kopje", ml: 150 },
-        { name: "Glas", ml: 250 },
-        { name: "Flesje", ml: 500 },
-        { name: "Mok", ml: 300 }
-    ];
-
     async function laadData() {
+        let melding = document.getElementById('melding');
+        melding.innerText = "Gegevens ophalen...";
         try {
             let res = await fetch(NPOINT_URL);
             let json = await res.json();
             
-            // Haal data op of gebruik standaarden als het leeg is
-            let drinkenLijst = json.drinken || [];
-            let tegelsLijst = json.tegels || standaardTegels;
-            let limiet = json.limiet !== undefined ? json.limiet : 1000;
+            lokaleData.drinken = json.drinken || [];
+            lokaleData.tegels = (json.tegels && json.tegels.length > 0) ? json.tegels : standaardTegels;
+            lokaleData.limiet = json.limiet !== undefined ? json.limiet : 1000;
 
-            // Update invoerveld limiet
-            document.getElementById('limiet-input').value = limiet;
+            document.getElementById('limiet-input').value = lokaleData.limiet;
+            renderTegels();
+            updateLEDBar();
 
-            renderTegels(tegelsLijst);
-            updateLEDBar(drinkenLijst, limiet);
+            melding.innerText = "Gegevens bijgewerkt! ✅";
+            setTimeout(() => melding.innerText = "", 2000);
         } catch (e) {
-            console.error("Fout bij ophalen data", e);
+            console.error("Fout bij ophalen", e);
+            melding.style.color = "red";
+            melding.innerText = "Fout bij ophalen!";
         }
     }
 
-    async function slaGeheleDataOp(nieuweData) {
+    async function slaAllesOp() {
         try {
-            // Haal eerst de huidige serverdata op om te zorgen dat we niets overschrijven
-            let res = await fetch(NPOINT_URL);
-            let json = await res.json();
-
-            let payload = {
-                drinken: json.drinken || [],
-                tegels: nieuweData.tegels || json.tegels || standaardTegels,
-                limiet: nieuweData.limiet !== undefined ? nieuweData.limiet : (json.limiet || 1000)
-            };
-
-            if (nieuweData.voegDrankToe) {
-                payload.drinken.push(nieuweData.voegDrankToe);
-            }
-
             await fetch(NPOINT_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
+                body: JSON.stringify(lokaleData)
             });
-
-            laadData();
         } catch (e) {
             console.error("Fout bij opslaan", e);
         }
     }
 
-    function renderTegels(tegels) {
-        window.huidigeTegels = tegels; // Sla tijdelijk op in geheugen voor acties
-        document.getElementById('tiles-container').innerHTML = tegels.map((t, index) => `
+    function renderTegels() {
+        let container = document.getElementById('tiles-container');
+        container.innerHTML = lokaleData.tegels.map((t, index) => `
             <div class="tile" onclick="voegDrankToe(${t.ml}, '${t.name}')">
                 <button class="delete-tile" onclick="event.stopPropagation(); verwijderTegel(${index})">&times;</button>
                 <div class="tile-title">${t.name}</div>
@@ -149,47 +151,50 @@
         let ml = document.getElementById('new-ml').value;
         if(!name || !ml) { alert("Vul naam en ml in!"); return; }
 
-        let tegels = window.huidigeTegels || standaardTegels;
-        tegels.push({ name: name, ml: Number(ml) });
-
+        lokaleData.tegels.push({ name: name, ml: Number(ml) });
         document.getElementById('new-name').value = '';
         document.getElementById('new-ml').value = '';
 
-        await slaGeheleDataOp({ tegels: tegels });
+        renderTegels();
+        await slaAllesOp();
     }
 
     async function verwijderTegel(index) {
-        let tegels = window.huidigeTegels || standaardTegels;
-        tegels.splice(index, 1);
-        await slaGeheleDataOp({ tegels: tegels });
+        lokaleData.tegels.splice(index, 1);
+        renderTegels();
+        await slaAllesOp();
     }
 
     async function wijzigLimiet() {
-        let nieuweLimiet = Number(document.getElementById('limiet-input').value);
-        await slaGeheleDataOp({ limiet: nieuweLimiet });
+        lokaleData.limiet = Number(document.getElementById('limiet-input').value);
+        updateLEDBar();
+        await slaAllesOp();
     }
 
     async function voegDrankToe(ml, type) {
         let melding = document.getElementById('melding');
+        melding.style.color = "#16a34a";
         melding.innerText = "Bezig met opslaan...";
 
         let nu = new Date();
-        let nieuwItem = {
+        lokaleData.drinken.push({
             datum: nu.toLocaleDateString('nl-NL'),
             tijd: nu.toLocaleTimeString('nl-NL', {hour: '2-digit', minute:'2-digit'}),
             ml: Number(ml),
             type: type
-        };
+        });
 
-        await slaGeheleDataOp({ voegDrankToe: nieuwItem });
+        updateLEDBar();
+        await slaAllesOp();
 
         melding.innerText = "Toegevoegd: " + ml + " ml ✅";
         setTimeout(() => melding.innerText = "", 2000);
     }
 
-    function updateLEDBar(drinkenLijst, limiet) {
+    function updateLEDBar() {
         let vandaag = new Date().toLocaleDateString('nl-NL');
-        let totaalMl = drinkenLijst.filter(d => d.datum === vandaag).reduce((sum, d) => sum + Number(d.ml), 0);
+        let totaalMl = lokaleData.drinken.filter(d => d.datum === vandaag).reduce((sum, d) => sum + Number(d.ml), 0);
+        let limiet = lokaleData.limiet;
         let percentage = Math.round((totaalMl / limiet) * 100);
 
         document.getElementById('status-tekst').innerText = `Totaal: ${totaalMl} ml / ${limiet} ml`;
@@ -209,11 +214,8 @@
         }
     }
 
-    // Laad direct bij openen
+    // Direct inladen bij openen
     laadData();
-
-    // Automatisch verversen om de 10 seconden voor live synchronisatie tussen telefoon en tablet
-    setInterval(laadData, 10000);
 </script>
 
 </body>
