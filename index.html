@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Drinken Tracker</title>
+    <style>
+        body { font-family: -apple-system, sans-serif; background: #f4f6f9; margin: 0; padding: 16px; color: #333; }
+        .container { max-width: 500px; margin: 0 auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+        h1 { font-size: 1.5rem; color: #1e3a8a; text-align: center; margin-top: 0; }
+        .card { background: #f8fafc; padding: 14px; border-radius: 10px; margin-bottom: 20px; border: 1px solid #e2e8f0; }
+        
+        /* LED Bar Stijl */
+        .led-bar-container { display: flex; gap: 4px; background: #e5e7eb; padding: 6px; border-radius: 8px; margin: 10px 0; height: 26px; box-sizing: border-box; }
+        .led-segment { flex: 1; background: #d1d5db; border-radius: 4px; transition: background 0.3s; }
+        .led-segment.active-groen { background: #22c55e; box-shadow: 0 0 6px rgba(34,197,94,0.6); }
+        .led-segment.active-amber { background: #f59e0b; box-shadow: 0 0 6px rgba(245,158,11,0.6); }
+        .led-segment.active-rood { background: #ef4444; box-shadow: 0 0 6px rgba(239,68,68,0.6); }
+
+        .limit-box { display: flex; gap: 8px; align-items: center; margin-top: 10px; font-size: 0.9rem; }
+        .limit-box input { width: 80px; padding: 6px; border: 1px solid #ccc; border-radius: 6px; text-align: center; font-weight: bold; }
+
+        /* Tegels */
+        .tiles-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+        .tile { background: #eff6ff; border: 2px solid #bfdbfe; border-radius: 10px; padding: 14px; text-align: center; cursor: pointer; position: relative; }
+        .tile:active { background: #dbeafe; transform: scale(0.98); }
+        .tile-title { font-weight: bold; font-size: 1.1rem; color: #1e40af; }
+        .tile-ml { font-size: 0.9rem; color: #6b7280; margin-top: 4px; }
+        .delete-tile { position: absolute; top: 4px; right: 8px; background: none; border: none; color: #ef4444; font-weight: bold; font-size: 1.1rem; cursor: pointer; }
+
+        .add-tile-box { background: #f9fafb; padding: 12px; border-radius: 10px; border: 1px dashed #cbd5e1; margin-bottom: 20px; }
+        .settings-box { background: #fef2f2; padding: 12px; border-radius: 10px; border: 1px solid #fecaca; margin-bottom: 20px; font-size: 0.85rem; }
+        .settings-box input { width: 100%; padding: 6px; margin-top: 4px; margin-bottom: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        
+        button.action-btn { background: #16a34a; color: white; border: none; padding: 8px 14px; border-radius: 6px; font-weight: bold; cursor: pointer; width: 100%; }
+        #melding { text-align: center; font-weight: bold; margin-top: 10px; color: #16a34a; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>💧 Drinken Tracker</h1>
+
+    <!-- Instellingen voor JSONbin -->
+    <div class="settings-box">
+        <details>
+            <summary style="font-weight:bold; cursor:pointer; color:#991b1b;">⚙️ JSONbin Koppeling Instellen</summary>
+            <label>JSONbin Bin ID:</label>
+            <input type="text" id="bin-id" placeholder="Plak hier je Bin ID">
+            <label>API Master Key ($2a$...):</label>
+            <input type="text" id="api-key" placeholder="Plak hier je X-Master-Key">
+            <button class="action-btn" onclick="slaInstellingenOp()">Instellingen Opslaan</button>
+        </details>
+    </div>
+    
+    <!-- LED Bar Dashboard Card -->
+    <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <b id="status-tekst">Totaal: 0 ml</b>
+            <span id="percentage-tekst" style="font-weight:bold; color:#2563eb;">0%</span>
+        </div>
+        <div class="led-bar-container" id="led-bar"></div>
+        <div class="limit-box">
+            <label>Doel / Limiet (ml):</label>
+            <input type="number" id="limiet-input" value="1000" onchange="updateLimiet()">
+        </div>
+    </div>
+
+    <p style="font-weight:bold; margin-bottom:8px;">Tik op een dranktegel:</p>
+    <div class="tiles-grid" id="tiles-container"></div>
+
+    <!-- Tegel toevoegen -->
+    <div class="add-tile-box">
+        <h4 style="margin:0 0 8px 0; font-size:0.95rem; color:#475569;">➕ Maak nieuwe dranktegel</h4>
+        <div style="display:flex; gap:8px;">
+            <input type="text" id="new-name" placeholder="Naam" style="flex:2; padding:8px; border:1px solid #ccc; border-radius:6px;">
+            <input type="number" id="new-ml" placeholder="ml" style="flex:1; padding:8px; border:1px solid #ccc; border-radius:6px;">
+            <button type="button" onclick="voegTegelToe()" style="background:#16a34a; color:white; border:none; padding:8px 14px; border-radius:6px; font-weight:bold; cursor:pointer;">+</button>
+        </div>
+    </div>
+
+    <div id="melding"></div>
+</div>
+
+<script>
+    // Genereer 10 LED segmenten
+    const ledBar = document.getElementById('led-bar');
+    for(let i = 0; i < 10; i++) {
+        let seg = document.createElement('div');
+        seg.className = 'led-segment';
+        seg.id = 'led-' + i;
+        ledBar.appendChild(seg);
+    }
+
+    let standaardTegels = [
+        { name: "Kopje", ml: 150 },
+        { name: "Glas", ml: 250 },
+        { name: "Flesje", ml: 500 },
+        { name: "Mok", ml: 300 }
+    ];
+
+    // Laad opgeslagen instellingen
+    document.getElementById('bin-id').value = localStorage.getItem('jsonbin_id') || '';
+    document.getElementById('api-key').value = localStorage.getItem('jsonbin_key') || '';
+
+    function slaInstellingenOp() {
+        localStorage.setItem('jsonbin_id', document.getElementById('bin-id').value);
+        localStorage.setItem('jsonbin_key', document.getElementById('api-key').value);
+        alert("Instellingen opgeslagen!");
+        laadData();
+    }
+
+    function getLimiet() {
+        return Number(localStorage.getItem('drinkLimit')) || 1000;
+    }
+
+    function updateLimiet() {
+        localStorage.setItem('drinkLimit', document.getElementById('limiet-input').value);
+        laadData();
+    }
+    document.getElementById('limiet-input').value = getLimiet();
+
+    function getTegels() {
+        let opgeslagen = localStorage.getItem('drankTegels');
+        return opgeslagen ? JSON.parse(opgeslagen) : standaardTegels;
+    }
+
+    function renderTegels() {
+        let tegels = getTegels();
+        document.getElementById('tiles-container').innerHTML = tegels.map((t, index) => `
+            <div class="tile" onclick="voegDrankToe(${t.ml}, '${t.name}')">
+                <button class="delete-tile" onclick="event.stopPropagation(); verwijderTegel(${index})">&times;</button>
+                <div class="tile-title">${t.name}</div>
+                <div class="tile-ml">${t.ml} ml</div>
+            </div>
+        `).join('');
+    }
+
+    function voegTegelToe() {
+        let name = document.getElementById('new-name').value;
+        let ml = document.getElementById('new-ml').value;
+        if(!name || !ml) { alert("Vul naam en ml in!"); return; }
+        let tegels = getTegels();
+        tegels.push({ name: name, ml: Number(ml) });
+        localStorage.setItem('drankTegels', JSON.stringify(tegels));
+        document.getElementById('new-name').value = '';
+        document.getElementById('new-ml').value = '';
+        renderTegels();
+    }
+
+    function verwijderTegel(index) {
+        let tegels = getTegels();
+        tegels.splice(index, 1);
+        localStorage.setItem('drankTegels', JSON.stringify(tegels));
+        renderTegels();
+    }
+
+    async function laadData() {
+        let binId = localStorage.getItem('jsonbin_id');
+        let apiKey = localStorage.getItem('jsonbin_key');
+        if (!binId || !apiKey) return;
+
+        try {
+            let res = await fetch(`https://api.jsonbin.io/v3/b/${binId}/latest`, {
+                headers: { 'X-Master-Key': apiKey }
+            });
+            let json = await res.json();
+            let drinkenLijst = json.record.drinken || [];
+            updateLEDBar(drinkenLijst);
+        } catch (e) {
+            console.error("Fout bij ophalen data", e);
+        }
+    }
+
+    async function voegDrankToe(ml, type) {
+        let binId = localStorage.getItem('jsonbin_id');
+        let apiKey = localStorage.getItem('jsonbin_key');
+        if (!binId || !apiKey) {
+            alert("Vul eerst je JSONbin instellingen in bovenin!");
+            return;
+        }
+
+        let melding = document.getElementById('melding');
+        melding.innerText = "Bezig met opslaan...";
+
+        try {
+            // Eerst huidige data ophalen
+            let res = await fetch(`https://api.jsonbin.io/v3/b/${binId}/latest`, {
+                headers: { 'X-Master-Key': apiKey }
+            });
+            let json = await res.json();
+            let drinkenLijst = json.record.drinken || [];
+
+            // Nieuw item toevoegen
+            let nu = new Date();
+            drinkenLijst.push({
+                datum: nu.toLocaleDateString('nl-NL'),
+                tijd: nu.toLocaleTimeString('nl-NL', {hour: '2-digit', minute:'2-digit'}),
+                ml: Number(ml),
+                type: type
+            });
+
+            // Opslaan naar JSONbin
+            await fetch(`https://api.jsonbin.io/v3/b/${binId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Master-Key': apiKey
+                },
+                body: JSON.stringify({ drinken: drinkenLijst })
+            });
+
+            melding.innerText = "Toegevoegd: " + ml + " ml ✅";
+            setTimeout(() => melding.innerText = "", 2000);
+            updateLEDBar(drinkenLijst);
+        } catch (e) {
+            console.error(e);
+            melding.style.color = "red";
+            melding.innerText = "Fout bij opslaan!";
+        }
+    }
+
+    function updateLEDBar(drinkenLijst) {
+        let vandaag = new Date().toLocaleDateString('nl-NL');
+        let totaalMl = drinkenLijst.filter(d => d.datum === vandaag).reduce((sum, d) => sum + Number(d.ml), 0);
+        let limiet = getLimiet();
+        let percentage = Math.round((totaalMl / limiet) * 100);
+
+        document.getElementById('status-tekst').innerText = `Totaal: ${totaalMl} ml / ${limiet} ml`;
+        document.getElementById('percentage-tekst').innerText = percentage + '%';
+
+        // Kleuren: tot 75% groen, tot 100% amber, daarboven rood
+        let kleurKlasse = 'active-groen';
+        if (percentage > 75 && percentage <= 100) kleurKlasse = 'active-amber';
+        if (percentage > 100) kleurKlasse = 'active-rood';
+
+        let actieveLeds = Math.min(10, Math.round((totaalMl / limiet) * 10));
+        if(totaalMl > 0 && actieveLeds === 0) actieveLeds = 1;
+
+        for(let i = 0; i < 10; i++) {
+            let seg = document.getElementById('led-' + i);
+            seg.className = i < actieveLeds ? 'led-segment ' + kleurKlasse : 'led-segment';
+        }
+    }
+
+    renderTegels();
+    laadData();
+</script>
+
+</body>
+</html>
