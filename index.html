@@ -3,219 +3,132 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Drinken Tracker</title>
+    <title>MijnData Tracker</title>
     <style>
         body { font-family: -apple-system, sans-serif; background: #f4f6f9; margin: 0; padding: 16px; color: #333; }
         .container { max-width: 500px; margin: 0 auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
         h1 { font-size: 1.5rem; color: #1e3a8a; text-align: center; margin-top: 0; }
-        .card { background: #f8fafc; padding: 14px; border-radius: 10px; margin-bottom: 20px; border: 1px solid #e2e8f0; }
+        .tabs { display: flex; gap: 8px; margin-bottom: 20px; }
+        .tab-btn { flex: 1; padding: 10px; border: none; background: #e2e8f0; border-radius: 8px; font-weight: bold; cursor: pointer; color: #475569; }
+        .tab-btn.active { background: #2563eb; color: white; }
         
-        /* LED Bar Stijl */
-        .led-bar-container { display: flex; gap: 4px; background: #e5e7eb; padding: 6px; border-radius: 8px; margin: 10px 0; height: 26px; box-sizing: border-box; }
-        .led-segment { flex: 1; background: #d1d5db; border-radius: 4px; transition: background 0.3s; }
-        .led-segment.active-groen { background: #22c55e; box-shadow: 0 0 6px rgba(34,197,94,0.6); }
-        .led-segment.active-amber { background: #f59e0b; box-shadow: 0 0 6px rgba(245,158,11,0.6); }
-        .led-segment.active-rood { background: #ef4444; box-shadow: 0 0 6px rgba(239,68,68,0.6); }
-
-        .limit-box { display: flex; gap: 8px; align-items: center; margin-top: 10px; font-size: 0.9rem; }
-        .limit-box input { width: 80px; padding: 6px; border: 1px solid #ccc; border-radius: 6px; text-align: center; font-weight: bold; }
-
-        /* Tegels */
-        .tiles-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
-        .tile { background: #eff6ff; border: 2px solid #bfdbfe; border-radius: 10px; padding: 14px; text-align: center; cursor: pointer; position: relative; }
-        .tile:active { background: #dbeafe; transform: scale(0.98); }
-        .tile-title { font-weight: bold; font-size: 1.1rem; color: #1e40af; }
-        .tile-ml { font-size: 0.9rem; color: #6b7280; margin-top: 4px; }
-        .delete-tile { position: absolute; top: 4px; right: 8px; background: none; border: none; color: #ef4444; font-weight: bold; font-size: 1.1rem; cursor: pointer; }
-
-        .add-tile-box { background: #f9fafb; padding: 12px; border-radius: 10px; border: 1px dashed #cbd5e1; margin-bottom: 20px; }
-        .sync-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; background: #e2e8f0; padding: 8px 12px; border-radius: 8px; font-size: 0.9rem; }
-        .sync-btn { background: #2563eb; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; }
-        #melding { text-align: center; font-weight: bold; margin-top: 10px; color: #16a34a; }
+        .form-group { margin-bottom: 14px; }
+        label { display: block; font-weight: bold; margin-bottom: 6px; font-size: 0.9rem; }
+        input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
+        
+        button.submit-btn { width: 100%; background: #16a34a; color: white; border: none; padding: 12px; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        #status { text-align: center; font-weight: bold; margin-top: 15px; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1>💧 Drinken Tracker</h1>
+    <h1>📊 MijnData Invoering</h1>
 
-    <!-- Handmatige sync balk -->
-    <div class="sync-bar">
-        <span>🔄 Synchronisatie</span>
-        <button class="sync-btn" onclick="laadData()">Gegevens ophalen</button>
-    </div>
-    
-    <!-- LED Bar Dashboard Card -->
-    <div class="card">
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-            <b id="status-tekst">Totaal: 0 ml</b>
-            <span id="percentage-tekst" style="font-weight:bold; color:#2563eb;">0%</span>
-        </div>
-        <div class="led-bar-container" id="led-bar"></div>
-        <div class="limit-box">
-            <label>Doel / Limiet (ml):</label>
-            <input type="number" id="limiet-input" value="1000" onchange="wijzigLimiet()">
-        </div>
+    <!-- Tabbladen voor verschillende formulieren -->
+    <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('drinken')">💧 Drinken</button>
+        <button class="tab-btn" onclick="switchTab('eten')">🍽️ Eten</button>
+        <button class="tab-btn" onclick="switchTab('ritten')">🚗 Ritten</button>
     </div>
 
-    <p style="font-weight:bold; margin-bottom:8px;">Tik op een dranktegel:</p>
-    <div class="tiles-grid" id="tiles-container"></div>
-
-    <!-- Tegel toevoegen -->
-    <div class="add-tile-box">
-        <h4 style="margin:0 0 8px 0; font-size:0.95rem; color:#475569;">➕ Maak nieuwe dranktegel</h4>
-        <div style="display:flex; gap:8px;">
-            <input type="text" id="new-name" placeholder="Naam" style="flex:2; padding:8px; border:1px solid #ccc; border-radius:6px;">
-            <input type="number" id="new-ml" placeholder="ml" style="flex:1; padding:8px; border:1px solid #ccc; border-radius:6px;">
-            <button type="button" onclick="voegTegelToe()" style="background:#16a34a; color:white; border:none; padding:8px 14px; border-radius:6px; font-weight:bold; cursor:pointer;">+</button>
+    <!-- Formulier Drinken -->
+    <form id="form-drinken" onsubmit="verstuurData(event, 'drinken')">
+        <div class="form-group">
+            <label>Type drank:</label>
+            <input type="text" id="drinken-type" placeholder="bijv. Water, Koffie, Thee" required>
         </div>
-    </div>
+        <div class="form-group">
+            <label>Hoeveelheid (ml):</label>
+            <input type="number" id="drinken-ml" placeholder="250" required>
+        </div>
+        <button type="submit" class="submit-btn">Verstuur naar Tabblad 'Drinken'</button>
+    </form>
 
-    <div id="melding"></div>
+    <!-- Formulier Eten -->
+    <form id="form-eten" style="display:none;" onsubmit="verstuurData(event, 'eten')">
+        <div class="form-group">
+            <label>Omschrijving maaltijd:</label>
+            <input type="text" id="eten-omschrijving" placeholder="bijv. Broodje kaas" required>
+        </div>
+        <div class="form-group">
+            <label>Calorieën (optioneel):</label>
+            <input type="number" id="eten-calorieen" placeholder="350">
+        </div>
+        <button type="submit" class="submit-btn">Verstuur naar Tabblad 'Eten'</button>
+    </form>
+
+    <!-- Formulier Ritten -->
+    <form id="form-ritten" style="display:none;" onsubmit="verstuurData(event, 'ritten')">
+        <div class="form-group">
+            <label>Van:</label>
+            <input type="text" id="ritten-van" placeholder="Vertreklocatie" required>
+        </div>
+        <div class="form-group">
+            <label>Naar:</label>
+            <input type="text" id="ritten-naar" placeholder="Bestemming" required>
+        </div>
+        <div class="form-group">
+            <label>Kilometers:</label>
+            <input type="number" id="ritten-km" placeholder="15" required>
+        </div>
+        <button type="submit" class="submit-btn">Verstuur naar Tabblad 'Ritten'</button>
+    </form>
+
+    <div id="status"></div>
 </div>
 
 <script>
-    const NPOINT_URL = "https://api.npoint.io/179458eef924c0acf62d";
+    // PLAK HIER JOUW GOOGLE APPS SCRIPT WEB-APP URL IN:
+    const SCRIPT_URL = "HIER_JOUW_APPS_SCRIPT_URL_PLAKKEN";
 
-    let standaardTegels = [
-        { name: "Kopje", ml: 150 },
-        { name: "Glas", ml: 250 },
-        { name: "Flesje", ml: 500 },
-        { name: "Mok", ml: 300 }
-    ];
+    function switchTab(tabNaam) {
+        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+        event.target.classList.add('active');
 
-    let lokaleData = {
-        drinken: [],
-        tegels: standaardTegels,
-        limiet: 1000
-    };
-
-    // Genereer 10 LED segmenten
-    const ledBar = document.getElementById('led-bar');
-    for(let i = 0; i < 10; i++) {
-        let seg = document.createElement('div');
-        seg.className = 'led-segment';
-        seg.id = 'led-' + i;
-        ledBar.appendChild(seg);
+        document.getElementById('form-drinken').style.display = tabNaam === 'drinken' ? 'block' : 'none';
+        document.getElementById('form-eten').style.display = tabNaam === 'eten' ? 'block' : 'none';
+        document.getElementById('form-ritten').style.display = tabNaam === 'ritten' ? 'block' : 'none';
     }
 
-    async function laadData() {
-        let melding = document.getElementById('melding');
-        melding.innerText = "Gegevens ophalen...";
-        try {
-            let res = await fetch(NPOINT_URL);
-            let json = await res.json();
-            
-            lokaleData.drinken = json.drinken || [];
-            lokaleData.tegels = (json.tegels && json.tegels.length > 0) ? json.tegels : standaardTegels;
-            lokaleData.limiet = json.limiet !== undefined ? json.limiet : 1000;
+    async function verstuurData(e, actie) {
+        e.preventDefault();
+        let status = document.getElementById('status');
+        status.style.color = '#2563eb';
+        status.innerText = "Opslaan in Google Sheet...";
 
-            document.getElementById('limiet-input').value = lokaleData.limiet;
-            renderTegels();
-            updateLEDBar();
+        let payload = { actie: actie };
 
-            melding.innerText = "Gegevens bijgewerkt! ✅";
-            setTimeout(() => melding.innerText = "", 2000);
-        } catch (e) {
-            console.error("Fout bij ophalen", e);
-            melding.style.color = "red";
-            melding.innerText = "Fout bij ophalen!";
+        if (actie === 'drinken') {
+            payload.type = document.getElementById('drinken-type').value;
+            payload.ml = document.getElementById('drinken-ml').value;
+        } else if (actie === 'eten') {
+            payload.omschrijving = document.getElementById('eten-omschrijving').value;
+            payload.calorieen = document.getElementById('eten-calorieen').value;
+        } else if (actie === 'ritten') {
+            payload.van = document.getElementById('ritten-van').value;
+            payload.naar = document.getElementById('ritten-naar').value;
+            payload.km = document.getElementById('ritten-km').value;
         }
-    }
 
-    async function slaAllesOp() {
         try {
-            await fetch(NPOINT_URL, {
+            await fetch(SCRIPT_URL, {
                 method: 'POST',
+                mode: 'no-cors', // Voorkomt CORS problemen met Apps Script
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(lokaleData)
+                body: JSON.stringify(payload)
             });
-        } catch (e) {
-            console.error("Fout bij opslaan", e);
+
+            status.style.color = '#16a34a';
+            status.innerText = `Succesvol opgeslagen in tabblad '${actie.charAt(0).toUpperCase() + actie.slice(1)}'! ✅`;
+            e.target.reset();
+            setTimeout(() => status.innerText = "", 3000);
+        } catch (err) {
+            console.error(err);
+            status.style.color = '#ef4444';
+            status.innerText = "Er is een fout opgetreden bij het verzenden.";
         }
     }
-
-    function renderTegels() {
-        let container = document.getElementById('tiles-container');
-        container.innerHTML = lokaleData.tegels.map((t, index) => `
-            <div class="tile" onclick="voegDrankToe(${t.ml}, '${t.name}')">
-                <button class="delete-tile" onclick="event.stopPropagation(); verwijderTegel(${index})">&times;</button>
-                <div class="tile-title">${t.name}</div>
-                <div class="tile-ml">${t.ml} ml</div>
-            </div>
-        `).join('');
-    }
-
-    async function voegTegelToe() {
-        let name = document.getElementById('new-name').value;
-        let ml = document.getElementById('new-ml').value;
-        if(!name || !ml) { alert("Vul naam en ml in!"); return; }
-
-        lokaleData.tegels.push({ name: name, ml: Number(ml) });
-        document.getElementById('new-name').value = '';
-        document.getElementById('new-ml').value = '';
-
-        renderTegels();
-        await slaAllesOp();
-    }
-
-    async function verwijderTegel(index) {
-        lokaleData.tegels.splice(index, 1);
-        renderTegels();
-        await slaAllesOp();
-    }
-
-    async function wijzigLimiet() {
-        lokaleData.limiet = Number(document.getElementById('limiet-input').value);
-        updateLEDBar();
-        await slaAllesOp();
-    }
-
-    async function voegDrankToe(ml, type) {
-        let melding = document.getElementById('melding');
-        melding.style.color = "#16a34a";
-        melding.innerText = "Bezig met opslaan...";
-
-        let nu = new Date();
-        lokaleData.drinken.push({
-            datum: nu.toLocaleDateString('nl-NL'),
-            tijd: nu.toLocaleTimeString('nl-NL', {hour: '2-digit', minute:'2-digit'}),
-            ml: Number(ml),
-            type: type
-        });
-
-        updateLEDBar();
-        await slaAllesOp();
-
-        melding.innerText = "Toegevoegd: " + ml + " ml ✅";
-        setTimeout(() => melding.innerText = "", 2000);
-    }
-
-    function updateLEDBar() {
-        let vandaag = new Date().toLocaleDateString('nl-NL');
-        let totaalMl = lokaleData.drinken.filter(d => d.datum === vandaag).reduce((sum, d) => sum + Number(d.ml), 0);
-        let limiet = lokaleData.limiet;
-        let percentage = Math.round((totaalMl / limiet) * 100);
-
-        document.getElementById('status-tekst').innerText = `Totaal: ${totaalMl} ml / ${limiet} ml`;
-        document.getElementById('percentage-tekst').innerText = percentage + '%';
-
-        // Kleuren: <75% groen, 75-100% amber, >100% rood
-        let kleurKlasse = 'active-groen';
-        if (percentage > 75 && percentage <= 100) kleurKlasse = 'active-amber';
-        if (percentage > 100) kleurKlasse = 'active-rood';
-
-        let actieveLeds = Math.min(10, Math.round((totaalMl / limiet) * 10));
-        if(totaalMl > 0 && actieveLeds === 0) actieveLeds = 1;
-
-        for(let i = 0; i < 10; i++) {
-            let seg = document.getElementById('led-' + i);
-            seg.className = i < actieveLeds ? 'led-segment ' + kleurKlasse : 'led-segment';
-        }
-    }
-
-    // Direct inladen bij openen
-    laadData();
 </script>
 
 </body>
