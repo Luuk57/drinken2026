@@ -29,10 +29,6 @@
         .delete-tile { position: absolute; top: 4px; right: 8px; background: none; border: none; color: #ef4444; font-weight: bold; font-size: 1.1rem; cursor: pointer; }
 
         .add-tile-box { background: #f9fafb; padding: 12px; border-radius: 10px; border: 1px dashed #cbd5e1; margin-bottom: 20px; }
-        .settings-box { background: #fef2f2; padding: 12px; border-radius: 10px; border: 1px solid #fecaca; margin-bottom: 20px; font-size: 0.85rem; }
-        .settings-box input { width: 100%; padding: 6px; margin-top: 4px; margin-bottom: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
-        
-        button.action-btn { background: #16a34a; color: white; border: none; padding: 8px 14px; border-radius: 6px; font-weight: bold; cursor: pointer; width: 100%; }
         #melding { text-align: center; font-weight: bold; margin-top: 10px; color: #16a34a; }
     </style>
 </head>
@@ -40,18 +36,6 @@
 
 <div class="container">
     <h1>💧 Drinken Tracker</h1>
-
-    <!-- Instellingen voor JSONbin -->
-    <div class="settings-box">
-        <details>
-            <summary style="font-weight:bold; cursor:pointer; color:#991b1b;">⚙️ JSONbin Koppeling Instellen</summary>
-            <label>JSONbin Bin ID:</label>
-            <input type="text" id="bin-id" placeholder="Plak hier je Bin ID">
-            <label>API Master Key ($2a$...):</label>
-            <input type="text" id="api-key" placeholder="Plak hier je X-Master-Key">
-            <button class="action-btn" onclick="slaInstellingenOp()">Instellingen Opslaan</button>
-        </details>
-    </div>
     
     <!-- LED Bar Dashboard Card -->
     <div class="card">
@@ -83,6 +67,9 @@
 </div>
 
 <script>
+    // Jouw vaste npoint API URL
+    const NPOINT_URL = "https://api.npoint.io/179458eef924c0acf62d";
+
     // Genereer 10 LED segmenten
     const ledBar = document.getElementById('led-bar');
     for(let i = 0; i < 10; i++) {
@@ -98,17 +85,6 @@
         { name: "Flesje", ml: 500 },
         { name: "Mok", ml: 300 }
     ];
-
-    // Laad opgeslagen instellingen
-    document.getElementById('bin-id').value = localStorage.getItem('jsonbin_id') || '';
-    document.getElementById('api-key').value = localStorage.getItem('jsonbin_key') || '';
-
-    function slaInstellingenOp() {
-        localStorage.setItem('jsonbin_id', document.getElementById('bin-id').value);
-        localStorage.setItem('jsonbin_key', document.getElementById('api-key').value);
-        alert("Instellingen opgeslagen!");
-        laadData();
-    }
 
     function getLimiet() {
         return Number(localStorage.getItem('drinkLimit')) || 1000;
@@ -156,16 +132,10 @@
     }
 
     async function laadData() {
-        let binId = localStorage.getItem('jsonbin_id');
-        let apiKey = localStorage.getItem('jsonbin_key');
-        if (!binId || !apiKey) return;
-
         try {
-            let res = await fetch(`https://api.jsonbin.io/v3/b/${binId}/latest`, {
-                headers: { 'X-Master-Key': apiKey }
-            });
+            let res = await fetch(NPOINT_URL);
             let json = await res.json();
-            let drinkenLijst = json.record.drinken || [];
+            let drinkenLijst = json.drinken || [];
             updateLEDBar(drinkenLijst);
         } catch (e) {
             console.error("Fout bij ophalen data", e);
@@ -173,25 +143,16 @@
     }
 
     async function voegDrankToe(ml, type) {
-        let binId = localStorage.getItem('jsonbin_id');
-        let apiKey = localStorage.getItem('jsonbin_key');
-        if (!binId || !apiKey) {
-            alert("Vul eerst je JSONbin instellingen in bovenin!");
-            return;
-        }
-
         let melding = document.getElementById('melding');
         melding.innerText = "Bezig met opslaan...";
 
         try {
-            // Eerst huidige data ophalen
-            let res = await fetch(`https://api.jsonbin.io/v3/b/${binId}/latest`, {
-                headers: { 'X-Master-Key': apiKey }
-            });
+            // Eerst huidige data ophalen van npoint
+            let res = await fetch(NPOINT_URL);
             let json = await res.json();
-            let drinkenLijst = json.record.drinken || [];
+            let drinkenLijst = json.drinken || [];
 
-            // Nieuw item toevoegen
+            // Nieuw drankje toevoegen met datum en tijd
             let nu = new Date();
             drinkenLijst.push({
                 datum: nu.toLocaleDateString('nl-NL'),
@@ -200,13 +161,10 @@
                 type: type
             });
 
-            // Opslaan naar JSONbin
-            await fetch(`https://api.jsonbin.io/v3/b/${binId}`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Master-Key': apiKey
-                },
+            // Opslaan naar npoint via een POST / PUT verzoek
+            await fetch(NPOINT_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ drinken: drinkenLijst })
             });
 
@@ -229,7 +187,7 @@
         document.getElementById('status-tekst').innerText = `Totaal: ${totaalMl} ml / ${limiet} ml`;
         document.getElementById('percentage-tekst').innerText = percentage + '%';
 
-        // Kleuren: tot 75% groen, tot 100% amber, daarboven rood
+        // Kleur logica: tot 75% groen, tot 100% amber, 100% en hoger rood
         let kleurKlasse = 'active-groen';
         if (percentage > 75 && percentage <= 100) kleurKlasse = 'active-amber';
         if (percentage > 100) kleurKlasse = 'active-rood';
@@ -245,6 +203,9 @@
 
     renderTegels();
     laadData();
+
+    // Elke 10 seconden automatisch verversen zodat je wijzigingen op je andere apparaat ook meteen ziet
+    setInterval(laadData, 10000);
 </script>
 
 </body>
